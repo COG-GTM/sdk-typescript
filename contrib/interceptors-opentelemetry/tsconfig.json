@@ -8,6 +8,7 @@
     { "path": "../../packages/activity" },
     { "path": "../../packages/client" },
     { "path": "../../packages/common" },
+    { "path": "../../packages/nexus" },
     { "path": "../../packages/plugin" },
     { "path": "../../packages/proto" },
     { "path": "../../packages/test-helpers" },

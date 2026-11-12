@@ -14,6 +14,8 @@ import {
 export const TRACE_HEADER = '_tracer-data';
 /** As in workflow run id */
 export const RUN_ID_ATTR_KEY = 'run_id';
+/** As in namespace */
+export const NAMESPACE_ATTR_KEY = 'temporalNamespace';
 /** As in workflow id */
 export const WORKFLOW_ID_ATTR_KEY = 'temporalWorkflowId';
 /** As in activity id */

@@ -31,11 +31,18 @@ import {
   WORKFLOW_ID_ATTR_KEY,
   UPDATE_ID_ATTR_KEY,
   TERMINATE_REASON_ATTR_KEY,
+  NAMESPACE_ATTR_KEY,
 } from '../instrumentation';
 import { SpanName, SPAN_DELIMITER } from '../workflow/definitions';
 
 export interface InterceptorOptions {
   readonly tracer?: otel.Tracer;
+  /**
+   * Namespace of the Client this interceptor is registered on, recorded on every span as the
+   * `temporalNamespace` attribute. Set automatically when using `OpenTelemetryPlugin`.
+   * The attribute is omitted if not provided.
+   */
+  readonly namespace?: string;
 }
 
 /**
@@ -47,9 +54,17 @@ export interface InterceptorOptions {
  */
 export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInterceptor {
   protected readonly tracer: otel.Tracer;
+  protected readonly namespace?: string;
 
   constructor(options?: InterceptorOptions) {
     this.tracer = options?.tracer ?? otel.trace.getTracer('@temporalio/interceptor-client');
+    this.namespace = options?.namespace;
+  }
+
+  protected setNamespaceAttribute(span: otel.Span): void {
+    if (this.namespace !== undefined) {
+      span.setAttribute(NAMESPACE_ATTR_KEY, this.namespace);
+    }
   }
 
   protected async headersWithContext(headers: Headers, _workflowId: string): Promise<Headers> {
@@ -61,6 +76,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_START}${SPAN_DELIMITER}${input.workflowType}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         const headers = await this.headersWithContext(input.headers, input.options.workflowId);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.options.workflowId);
         const runId = await next({ ...input, headers });
@@ -75,6 +91,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_SIGNAL}${SPAN_DELIMITER}${input.signalName}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         const headers = await this.headersWithContext(input.headers, input.workflowExecution.workflowId);
         await next({ ...input, headers });
@@ -90,6 +107,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_START}${SPAN_DELIMITER}${input.workflowType}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         const headers = await this.headersWithContext(input.headers, input.options.workflowId);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.options.workflowId);
         const output = await next({ ...input, headers });
@@ -107,6 +125,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_START_UPDATE}${SPAN_DELIMITER}${input.updateName}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.options.updateId) {
           span.setAttribute(UPDATE_ID_ATTR_KEY, input.options.updateId);
@@ -127,6 +146,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_UPDATE_WITH_START}${SPAN_DELIMITER}${input.updateName}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowStartOptions.workflowId);
         if (input.updateOptions.updateId) {
           span.setAttribute(UPDATE_ID_ATTR_KEY, input.updateOptions.updateId);
@@ -153,6 +173,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_SIGNAL_WITH_START}${SPAN_DELIMITER}${input.workflowType}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.options.workflowId);
         const headers = await this.headersWithContext(input.headers, input.options.workflowId);
         const runId = await next({ ...input, headers });
@@ -167,6 +188,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_QUERY}${SPAN_DELIMITER}${input.queryType}`,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         const headers = await this.headersWithContext(input.headers, input.workflowExecution.workflowId);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.workflowExecution.runId) {
@@ -185,6 +207,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: SpanName.WORKFLOW_TERMINATE,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.workflowExecution.runId) {
           span.setAttribute(RUN_ID_ATTR_KEY, input.workflowExecution.runId);
@@ -205,6 +228,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: SpanName.WORKFLOW_CANCEL,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.workflowExecution.runId) {
           span.setAttribute(RUN_ID_ATTR_KEY, input.workflowExecution.runId);
@@ -222,6 +246,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: SpanName.WORKFLOW_DESCRIBE,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.workflowExecution.runId) {
           span.setAttribute(RUN_ID_ATTR_KEY, input.workflowExecution.runId);
@@ -239,6 +264,7 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
       tracer: this.tracer,
       spanName: SpanName.WORKFLOW_FETCH_HISTORY,
       fn: async (span) => {
+        this.setNamespaceAttribute(span);
         span.setAttribute(WORKFLOW_ID_ATTR_KEY, input.workflowExecution.workflowId);
         if (input.workflowExecution.runId) {
           span.setAttribute(RUN_ID_ATTR_KEY, input.workflowExecution.runId);
@@ -252,7 +278,10 @@ export class OpenTelemetryWorkflowClientInterceptor implements WorkflowClientInt
     return instrumentAsyncIterable({
       tracer: this.tracer,
       spanName: SpanName.WORKFLOW_LIST,
-      fn: () => next(input),
+      fn: (span) => {
+        this.setNamespaceAttribute(span);
+        return next(input);
+      },
     });
   }
 }

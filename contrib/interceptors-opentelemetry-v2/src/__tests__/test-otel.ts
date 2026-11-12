@@ -20,7 +20,7 @@ import * as nexus from 'nexus-rpc';
 import { Subject, firstValueFrom } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { v4 as uuid4 } from 'uuid';
-import type { WorkflowClientInterceptor } from '@temporalio/client';
+import type { ConnectionLike, WorkflowClientInterceptor } from '@temporalio/client';
 import { WorkflowClient, WithStartWorkflowOperation, Client, Connection } from '@temporalio/client';
 import type {
   ActivityInboundCallsInterceptor,
@@ -52,7 +52,14 @@ import type {
 } from '../workflow';
 import { OpenTelemetryWorkflowClientInterceptor } from '../client';
 import { OpenTelemetryPlugin } from '..';
-import { instrument, instrumentSync, NEXUS_OPERATION_ATTR_KEY, NEXUS_SERVICE_ATTR_KEY } from '../instrumentation';
+import {
+  instrument,
+  instrumentSync,
+  NEXUS_OPERATION_ATTR_KEY,
+  NEXUS_SERVICE_ATTR_KEY,
+  NAMESPACE_ATTR_KEY,
+  WORKFLOW_ID_ATTR_KEY,
+} from '../instrumentation';
 import {
   makeWorkflowExporter,
   OpenTelemetryActivityInboundInterceptor,
@@ -164,6 +171,56 @@ test('OpenTelemetryPlugin injects workflow interceptor modules without preloadin
   });
   t.deepEqual(bundleOptions.preloadModules, ['existing-module']);
   t.deepEqual(bundleOptions.workflowInterceptorModules, [workflowInterceptorsPath]);
+});
+
+test('Otel client spans include the temporalNamespace attribute', async (t) => {
+  const exporter = new InMemorySpanExporter();
+  const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
+  const tracer = provider.getTracer('test-otel-client-namespace');
+  const connection = {
+    plugins: [],
+    workflowService: {
+      startWorkflowExecution: async () => ({ runId: 'run' }),
+      signalWorkflowExecution: async () => ({}),
+      listWorkflowExecutions: async () => ({ executions: [] }),
+    },
+  } as unknown as ConnectionLike;
+  const plugin = new OpenTelemetryPlugin({
+    resource: opentelemetry.resources.resourceFromAttributes({}),
+    spanProcessor: new SimpleSpanProcessor(new InMemorySpanExporter()),
+    tracer,
+  });
+  const pluginClient = new Client({ connection, namespace: 'plugin-namespace', plugins: [plugin] });
+  const handle = await pluginClient.workflow.start('workflow', { taskQueue: 'queue', workflowId: 'wf-plugin' });
+  await handle.signal('sig');
+  for await (const _ of pluginClient.workflow.list()) {
+    // No executions
+  }
+  const directClient = new Client({
+    connection,
+    namespace: 'direct-namespace',
+    interceptors: { workflow: [new OpenTelemetryWorkflowClientInterceptor({ tracer, namespace: 'direct-namespace' })] },
+  });
+  await directClient.workflow.start('workflow', { taskQueue: 'queue', workflowId: 'wf-direct' });
+  const unsetClient = new Client({
+    connection,
+    interceptors: { workflow: [new OpenTelemetryWorkflowClientInterceptor({ tracer })] },
+  });
+  await unsetClient.workflow.start('workflow', { taskQueue: 'queue', workflowId: 'wf-unset' });
+
+  t.deepEqual(
+    exporter
+      .getFinishedSpans()
+      .map((span) => [span.name, span.attributes[WORKFLOW_ID_ATTR_KEY], span.attributes[NAMESPACE_ATTR_KEY]]),
+    [
+      [`${SpanName.WORKFLOW_START}${SPAN_DELIMITER}workflow`, 'wf-plugin', 'plugin-namespace'],
+      [`${SpanName.WORKFLOW_SIGNAL}${SPAN_DELIMITER}sig`, 'wf-plugin', 'plugin-namespace'],
+      [SpanName.WORKFLOW_LIST, undefined, 'plugin-namespace'],
+      [`${SpanName.WORKFLOW_START}${SPAN_DELIMITER}workflow`, 'wf-direct', 'direct-namespace'],
+      [`${SpanName.WORKFLOW_START}${SPAN_DELIMITER}workflow`, 'wf-unset', undefined],
+    ]
+  );
+  await provider.shutdown();
 });
 
 if (RUN_INTEGRATION_TESTS) {
@@ -323,6 +380,13 @@ if (RUN_INTEGRATION_TESTS) {
       );
       t.true(querySpan !== undefined);
 
+      t.true(spans.length > 0);
+      t.deepEqual(
+        spans
+          .filter((span) => span.attributes[NAMESPACE_ATTR_KEY] !== 'default')
+          .map((span) => ({ name: span.name, namespace: span.attributes[NAMESPACE_ATTR_KEY] })),
+        []
+      );
       t.deepEqual(new Set(spans.map((span) => span.spanContext().traceId)).size, 1);
     } finally {
       // Cleanup the runtime so that it doesn't interfere with other tests
@@ -404,6 +468,7 @@ if (RUN_INTEGRATION_TESTS) {
         t.truthy(startSpan, 'StartNexusOperation span should exist');
         t.is(startSpan!.attributes[NEXUS_SERVICE_ATTR_KEY], 'otel-test-service');
         t.is(startSpan!.attributes[NEXUS_OPERATION_ATTR_KEY], 'my-async-op');
+        t.is(startSpan!.attributes[NAMESPACE_ATTR_KEY], 'default');
 
         const inboundStartSpan = spans.find(
           ({ name }) =>
@@ -413,6 +478,7 @@ if (RUN_INTEGRATION_TESTS) {
         t.is(inboundStartSpan!.status.code, SpanStatusCode.OK);
         t.is(inboundStartSpan!.attributes[NEXUS_SERVICE_ATTR_KEY], 'otel-test-service');
         t.is(inboundStartSpan!.attributes[NEXUS_OPERATION_ATTR_KEY], 'my-async-op');
+        t.is(inboundStartSpan!.attributes[NAMESPACE_ATTR_KEY], 'default');
         t.is(inboundStartSpan!.parentSpanContext?.spanId, startSpan!.spanContext().spanId);
         t.is(inboundStartSpan!.spanContext().traceId, startSpan!.spanContext().traceId);
 
@@ -424,6 +490,7 @@ if (RUN_INTEGRATION_TESTS) {
         t.is(inboundCancelSpan!.status.code, SpanStatusCode.OK);
         t.is(inboundCancelSpan!.attributes[NEXUS_SERVICE_ATTR_KEY], 'otel-test-service');
         t.is(inboundCancelSpan!.attributes[NEXUS_OPERATION_ATTR_KEY], 'my-async-op');
+        t.is(inboundCancelSpan!.attributes[NAMESPACE_ATTR_KEY], 'default');
         t.is(inboundCancelSpan!.parentSpanContext?.spanId, startSpan!.spanContext().spanId);
         t.is(inboundCancelSpan!.spanContext().traceId, startSpan!.spanContext().traceId);
       } finally {

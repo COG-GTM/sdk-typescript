@@ -5,6 +5,7 @@ import type { ReadableSpan, SpanExporter, SpanProcessor } from '@opentelemetry/s
 import type * as nexus from 'nexus-rpc';
 import type { Context as ActivityContext } from '@temporalio/activity';
 import { CompleteAsyncError } from '@temporalio/common';
+import { operationInfo } from '@temporalio/nexus';
 import type {
   Next,
   ActivityInboundCallsInterceptor,
@@ -28,6 +29,7 @@ import {
   ACTIVITY_ID_ATTR_KEY,
   NEXUS_SERVICE_ATTR_KEY,
   NEXUS_OPERATION_ATTR_KEY,
+  NAMESPACE_ATTR_KEY,
 } from '../instrumentation';
 import {
   type OpenTelemetryWorkflowExporter,
@@ -63,6 +65,7 @@ export class OpenTelemetryActivityInboundInterceptor implements ActivityInboundC
       tracer: this.tracer,
       spanName,
       fn: (span) => {
+        span.setAttribute(NAMESPACE_ATTR_KEY, this.ctx.info.namespace);
         span.setAttribute(ACTIVITY_ID_ATTR_KEY, this.ctx.info.activityId);
         if (this.ctx.info.inWorkflow) {
           span.setAttribute(WORKFLOW_ID_ATTR_KEY, this.ctx.info.workflowExecution!.workflowId);
@@ -136,6 +139,7 @@ export class OpenTelemetryNexusInboundInterceptor implements NexusInboundCallsIn
       tracer: this.tracer,
       spanName,
       fn: (span) => {
+        span.setAttribute(NAMESPACE_ATTR_KEY, operationInfo().namespace);
         span.setAttribute(NEXUS_SERVICE_ATTR_KEY, input.ctx.service);
         span.setAttribute(NEXUS_OPERATION_ATTR_KEY, input.ctx.operation);
         return next(input);
@@ -154,6 +158,7 @@ export class OpenTelemetryNexusInboundInterceptor implements NexusInboundCallsIn
       tracer: this.tracer,
       spanName,
       fn: (span) => {
+        span.setAttribute(NAMESPACE_ATTR_KEY, operationInfo().namespace);
         span.setAttribute(NEXUS_SERVICE_ATTR_KEY, input.ctx.service);
         span.setAttribute(NEXUS_OPERATION_ATTR_KEY, input.ctx.operation);
         return next(input);

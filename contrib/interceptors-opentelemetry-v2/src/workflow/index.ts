@@ -37,6 +37,7 @@ import {
   rawHeadersWithContext,
   nexusHeadersWithContext,
   UPDATE_ID_ATTR_KEY,
+  NAMESPACE_ATTR_KEY,
   NEXUS_SERVICE_ATTR_KEY,
   NEXUS_OPERATION_ATTR_KEY,
   NEXUS_ENDPOINT_ATTR_KEY,
@@ -48,6 +49,10 @@ import { DeterministicIdGenerator } from './id-generator';
 import { workflowInfo, ContinueAsNew } from './workflow-imports';
 
 export * from './definitions';
+
+function setNamespaceAttribute(span: otel.Span): void {
+  span.setAttribute(NAMESPACE_ATTR_KEY, workflowInfo().namespace);
+}
 
 let tracer: undefined | otel.Tracer = undefined;
 let contextManager: undefined | ContextManager = undefined;
@@ -95,7 +100,10 @@ export class OpenTelemetryInboundInterceptor implements WorkflowInboundCallsInte
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_EXECUTE}${SPAN_DELIMITER}${workflowInfo().workflowType}`,
-      fn: () => next(input),
+      fn: (span) => {
+        setNamespaceAttribute(span);
+        return next(input);
+      },
       context,
       acceptableErrors: (err) => err instanceof ContinueAsNew,
     });
@@ -110,7 +118,10 @@ export class OpenTelemetryInboundInterceptor implements WorkflowInboundCallsInte
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_HANDLE_SIGNAL}${SPAN_DELIMITER}${input.signalName}`,
-      fn: () => next(input),
+      fn: (span) => {
+        setNamespaceAttribute(span);
+        return next(input);
+      },
       context,
     });
   }
@@ -125,6 +136,7 @@ export class OpenTelemetryInboundInterceptor implements WorkflowInboundCallsInte
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_HANDLE_UPDATE}${SPAN_DELIMITER}${input.name}`,
       fn: (span) => {
+        setNamespaceAttribute(span);
         span.setAttribute(UPDATE_ID_ATTR_KEY, input.updateId);
         return next(input);
       },
@@ -138,6 +150,7 @@ export class OpenTelemetryInboundInterceptor implements WorkflowInboundCallsInte
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_VALIDATE_UPDATE}${SPAN_DELIMITER}${input.name}`,
       fn: (span) => {
+        setNamespaceAttribute(span);
         span.setAttribute(UPDATE_ID_ATTR_KEY, input.updateId);
         return next(input);
       },
@@ -154,7 +167,10 @@ export class OpenTelemetryInboundInterceptor implements WorkflowInboundCallsInte
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_HANDLE_QUERY}${SPAN_DELIMITER}${input.queryName}`,
-      fn: () => next(input),
+      fn: (span) => {
+        setNamespaceAttribute(span);
+        return next(input);
+      },
       context,
     });
   }
@@ -179,7 +195,8 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.ACTIVITY_START}${SPAN_DELIMITER}${input.activityType}`,
-      fn: async () => {
+      fn: async (span) => {
+        setNamespaceAttribute(span);
         const headers = headersWithContext(input.headers);
 
         return next({
@@ -197,7 +214,8 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.ACTIVITY_START}${SPAN_DELIMITER}${input.activityType}`,
-      fn: async () => {
+      fn: async (span) => {
+        setNamespaceAttribute(span);
         const headers = headersWithContext(input.headers);
 
         return next({
@@ -216,6 +234,7 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
       tracer: this.tracer,
       spanName: `${SpanName.NEXUS_OPERATION_START}${SPAN_DELIMITER}${input.service}/${input.operation}`,
       fn: async (span) => {
+        setNamespaceAttribute(span);
         span.setAttribute(NEXUS_SERVICE_ATTR_KEY, input.service);
         span.setAttribute(NEXUS_OPERATION_ATTR_KEY, input.operation);
         span.setAttribute(NEXUS_ENDPOINT_ATTR_KEY, input.endpoint);
@@ -232,7 +251,10 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_SIGNAL_WITH_START}${SPAN_DELIMITER}${extractWorkflowType(input.workflow)}`,
-      fn: async () => await next({ ...input, headers: rawHeadersWithContext(input.headers) }),
+      fn: async (span) => {
+        setNamespaceAttribute(span);
+        return await next({ ...input, headers: rawHeadersWithContext(input.headers) });
+      },
     });
   }
 
@@ -243,7 +265,8 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.CHILD_WORKFLOW_START}${SPAN_DELIMITER}${input.workflowType}`,
-      fn: async () => {
+      fn: async (span) => {
+        setNamespaceAttribute(span);
         const headers = headersWithContext(input.headers);
 
         return next({
@@ -261,7 +284,8 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.CONTINUE_AS_NEW}${SPAN_DELIMITER}${input.options.workflowType}`,
-      fn: async () => {
+      fn: async (span) => {
+        setNamespaceAttribute(span);
         const headers = headersWithContext(input.headers);
 
         return next({
@@ -280,7 +304,8 @@ export class OpenTelemetryOutboundInterceptor implements WorkflowOutboundCallsIn
     return await instrument({
       tracer: this.tracer,
       spanName: `${SpanName.WORKFLOW_SIGNAL}${SPAN_DELIMITER}${input.signalName}`,
-      fn: async () => {
+      fn: async (span) => {
+        setNamespaceAttribute(span);
         const headers = headersWithContext(input.headers);
 
         return next({

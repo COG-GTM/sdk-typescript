@@ -71,6 +71,7 @@
     "@opentelemetry/core": "^2.2.0",
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@temporalio/nexus": "workspace:*",
     "@temporalio/plugin": "workspace:*"
   },
   "devDependencies": {
