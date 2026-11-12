@@ -1,0 +1,1 @@
+OpenTelemetry interceptors now add a `temporalNamespace` attribute to Client, Workflow, Activity, and Nexus spans. `OpenTelemetryPlugin` sets the Client namespace automatically; when using `OpenTelemetryWorkflowClientInterceptor` directly, pass the new `namespace` option.

@@ -110,7 +110,7 @@ export class OpenTelemetryPlugin extends SimplePlugin {
         result[TRACE_HEADER] = encoded[0]!;
         return result;
       }
-    })({ tracer: this.otelOptions.tracer });
+    })({ tracer: this.otelOptions.tracer, namespace });
     return { ...existing, workflow: [...(workflow ?? []), interceptor] };
   }
 
